@@ -15,6 +15,7 @@ go run ./tools/lab up        # build + start devbox, runner, app (generates SSH 
 go run ./tools/lab monitor   # live process monitor: leaks, hangs, orphans
 go run ./tools/lab logs      # follow server/extension logs, errors highlighted
 go run ./tools/lab help      # everything else
+go run ./tools/lab session --up   # manual testing: containers + all monitors + dashboard (see MANUAL-TESTING.md)
 ```
 
 Tip: `go build -o ~/go/bin/lab ./tools/lab` and then just `lab <command>`. Inside the containers, `lab` is already on `PATH`.
@@ -33,6 +34,9 @@ Tip: `go build -o ~/go/bin/lab ./tools/lab` and then just `lab <command>`. Insid
 | `tools/internal/stress` | Generator for N chained packages (`text/template`) |
 | `tools/internal/lab` | docker compose, SSH, VSIX install, run-examples |
 | `lsp/` | Sample code for exercising LSP features (see below) |
+| `gobyexample/` | All Go by Example programs |
+| `tools/internal/dashboard` | Dashboard: CSV loading, SVG charts, page template |
+| `tools/internal/session` | `lab session` orchestration |
 | `containers/` | Dockerfile, sshd config, scratch module template |
 
 ## 1. Monitoring
@@ -46,6 +50,9 @@ Tip: `go build -o ~/go/bin/lab ./tools/lab` and then just `lab <command>`. Insid
 | `lab snapshot [--heapdump] PID` | Thread dump, heap info, VM flags, native memory, class histogram, lsof. |
 | `lab histo-diff OLD NEW` | Shows which classes grew between two snapshots, for leak hunting. |
 | `lab stress 300` / `lab stress-clean` | Generates 300 chained packages under `lsp/stress` (6000 promoted methods on `Node`) to load the server. |
+| `lab session [--up] [--down]` | **Manual testing:** everything above, for the host and every container at once, plus the dashboard. See [MANUAL-TESTING.md](MANUAL-TESTING.md). |
+| `lab dashboard` | Live dashboard at http://127.0.0.1:7070: process and container charts, alerts, markers, grouped log errors. Server-rendered Go, no JavaScript. |
+| `lab mark "step"` | Annotates a manual test step; shows as a dashed line on every chart. |
 | `lab in devbox monitor` / `lab in devbox logs` | The same commands, run inside a container. Output goes to `lab-out/<service>/`. |
 
 Alerts:
@@ -93,3 +100,4 @@ The Go LSP extension came from a VSIX, so it isn't installed in containers autom
 | `lsp/diagnostics/broken.go` | **intentionally broken.** Each `// want:` line should show a diagnostic or quick fix. It is excluded from `lab test` and from the runner. |
 | `tools/...` | real-world Go: build constraints (`proc_linux.go` / `proc_darwin.go`), `syscall`, `os/exec`, `text/template`, flag sets, tests |
 | `~/scratch` (devbox) | a second module that exists only inside the container |
+| `gobyexample/` | all 85 [Go by Example](https://gobyexample.com) programs, verbatim (CC BY 3.0, see `gobyexample/README.md`). The runner executes each one, with arguments, stdin, expected exit codes and server probes from `tools/internal/lab/examples.go`. `json` needs `GOEXPERIMENT=jsonv2` on Go 1.26, which the lab and containers set. |

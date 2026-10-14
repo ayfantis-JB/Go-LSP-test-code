@@ -31,6 +31,7 @@ ENV GOPATH=/home/dev/go \
     GOMODCACHE=/home/dev/go/pkg/mod \
     GOCACHE=/home/dev/.cache/go-build \
     GOTOOLCHAIN=local \
+    GOEXPERIMENT=jsonv2 \
     PATH=/home/dev/go/bin:/usr/local/go/bin:$PATH \
     LAB_OUT=/lab-out
 
