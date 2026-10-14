@@ -1,0 +1,8 @@
+.idea
+.git
+lab-out
+containers/ssh
+lsp/stress
+hello_world/hello-world
+constants/main
+**/*.test

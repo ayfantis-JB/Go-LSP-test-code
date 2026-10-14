@@ -1,0 +1,9 @@
+# Installed as /etc/ssh/sshd_config.d/lab.conf
+PasswordAuthentication no
+PermitRootLogin no
+AllowUsers dev
+AcceptEnv LANG LC_*
+X11Forwarding no
+# Docker ENV is not inherited by ssh sessions; login shells keep /usr/local/bin
+# (Debian /etc/profile), where the image symlinks go, gofmt, dlv and lab.
+SetEnv PATH=/home/dev/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin GOPATH=/home/dev/go GOMODCACHE=/home/dev/go/pkg/mod GOCACHE=/home/dev/.cache/go-build GOTOOLCHAIN=local LAB_OUT=/lab-out

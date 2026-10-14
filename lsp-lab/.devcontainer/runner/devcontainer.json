@@ -1,0 +1,18 @@
+// VS Code: "Dev Containers: Reopen in Container" and pick "lsp-lab runner".
+{
+  "name": "lsp-lab runner",
+  "dockerComposeFile": ["../../docker-compose.yml"],
+  "service": "runner",
+  "runServices": ["runner"],
+  "workspaceFolder": "/src",
+  "remoteUser": "dev",
+  "shutdownAction": "none",
+  "overrideCommand": false,
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
