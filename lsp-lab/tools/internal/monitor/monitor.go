@@ -171,10 +171,18 @@ func (w *Watcher) alert(lv level, code, msg string, p *tracked) {
 	color := map[level]string{info: dim, warn: yellow, alarm: red}[lv]
 	fmt.Fprintln(w.out, paint(color, line))
 	fmt.Fprintln(w.alerts, line)
-	if w.cfg.Notify && lv == alarm && runtime.GOOS == "darwin" {
-		script := fmt.Sprintf("display notification %q with title %q", truncate(msg, 200), "lspmon "+code)
-		exec.Command("osascript", "-e", script).Run()
+	if w.cfg.Notify && lv == alarm {
+		Notify("lspmon "+code, msg)
 	}
+}
+
+// Notify shows a desktop notification (macOS only; a no-op elsewhere).
+func Notify(title, msg string) {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	script := fmt.Sprintf("display notification %q with title %q", truncate(msg, 200), title)
+	exec.Command("osascript", "-e", script).Run()
 }
 
 // Sample takes one round of measurements and evaluates the rules.

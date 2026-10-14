@@ -11,17 +11,21 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"learn_go_by_example/tools/internal/dashboard"
 	"learn_go_by_example/tools/internal/jvm"
 	"learn_go_by_example/tools/internal/lab"
 	"learn_go_by_example/tools/internal/logs"
 	"learn_go_by_example/tools/internal/monitor"
 	"learn_go_by_example/tools/internal/proc"
 	"learn_go_by_example/tools/internal/report"
+	"learn_go_by_example/tools/internal/session"
 	"learn_go_by_example/tools/internal/stress"
 )
 
@@ -34,6 +38,9 @@ var commands []command
 
 func init() {
 	commands = []command{
+		{"session", "[--up] [--down] [flags]", "manual testing: monitors on host + every container, logs, dashboard", cmdSession},
+		{"dashboard", "[--addr :7070]", "live dashboard over lab-out/ (charts, alerts, markers, errors)", cmdDashboard},
+		{"mark", "TEXT", "annotate a manual test step on the dashboard charts", cmdMark},
 		{"up", "[--no-build]", "build and start devbox, runner, app; prints ssh config", cmdUp},
 		{"down", "", "stop containers (volumes kept)", compose("down")},
 		{"rebuild", "", "rebuild images without cache and restart", cmdRebuild},
@@ -49,6 +56,7 @@ func init() {
 		{"test", "", "go vet + go test (skips the broken diagnostics package)", cmdTest},
 		{"run-examples", "[--stay] [dir]", "vet, test and run every main package", cmdRunExamples},
 		{"monitor", "[flags]", "watch LSP processes: leaks, hangs, orphans (see -h)", cmdMonitor},
+		{"stop", "", "(inside a container) stop running lab monitor/logs processes", cmdStop},
 		{"logs", "[flags]", "follow server/extension logs, errors highlighted", cmdLogs},
 		{"errors", "[--since 24h]", "group and count errors in the logs", cmdErrors},
 		{"summary", "[csv]", "trend report for a samples CSV (default: latest)", cmdSummary},
@@ -170,19 +178,7 @@ func cmdInstallExtLocal(args []string) error {
 	return lab.InstallExtLocal(args[0], os.Stdout)
 }
 
-func cmdTest([]string) error {
-	r := root()
-	pkgs, err := lab.Packages(r)
-	if err != nil {
-		return err
-	}
-	for _, sub := range []string{"vet", "test"} {
-		if err := goCmd(r, append([]string{sub}, pkgs...)...); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+func cmdTest([]string) error { return lab.Check(root(), os.Stdout) }
 
 func cmdRunExamples(args []string) error {
 	fs := flag.NewFlagSet("run-examples", flag.ExitOnError)
@@ -384,4 +380,65 @@ func cmdStressClean([]string) error {
 
 func goCmd(dir string, args ...string) error {
 	return lab.Go(dir, os.Stdout, args...)
+}
+
+func cmdSession(args []string) error {
+	opt := session.Options{Root: root()}
+	fs := flag.NewFlagSet("session", flag.ExitOnError)
+	fs.BoolVar(&opt.Up, "up", false, "start the containers first")
+	fs.BoolVar(&opt.Build, "build", false, "with --up: rebuild images")
+	fs.BoolVar(&opt.Down, "down", false, "stop the containers on exit")
+	fs.BoolVar(&opt.Logs, "logs", true, "follow server logs on the host and in containers")
+	fs.StringVar(&opt.Addr, "addr", "127.0.0.1:7070", "dashboard listen address")
+	fs.DurationVar(&opt.Interval, "interval", 5*time.Second, "sampling interval")
+	fs.DurationVar(&opt.Heartbeat, "heartbeat", time.Minute, "print a status line this often (0 = off)")
+	fs.BoolVar(&opt.Notify, "notify", true, "macOS notification on ALERT")
+	services := fs.String("services", strings.Join(lab.ServiceNames(), ","), "containers to monitor")
+	fs.Parse(args)
+	opt.Services = strings.Split(*services, ",")
+	ctx, cancel := interruptible()
+	defer cancel()
+	return session.Run(ctx, opt, os.Stdout)
+}
+
+func cmdDashboard(args []string) error {
+	fs := flag.NewFlagSet("dashboard", flag.ExitOnError)
+	addr := fs.String("addr", "127.0.0.1:7070", "listen address")
+	fs.Parse(args)
+	r := root()
+	ctx, cancel := interruptible()
+	defer cancel()
+	return dashboard.Serve(ctx, dashboard.Options{Addr: *addr, OutRoot: filepath.Join(r, "lab-out"), ComposeDir: r, Services: lab.ServiceNames()},
+		func(url string) { fmt.Println("dashboard:", url) })
+}
+
+func cmdMark(args []string) error {
+	if len(args) == 0 {
+		return errors.New(`usage: mark "what you are about to test"`)
+	}
+	m, err := dashboard.AddMarker(filepath.Join(root(), "lab-out"), strings.Join(args, " "))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("marked %s %s\n", m.T.Format(time.TimeOnly), m.Text)
+	return nil
+}
+
+var labProcRe = regexp.MustCompile(`(^|/)lab (monitor|logs)( |$)`)
+
+func cmdStop([]string) error {
+	procs, err := proc.List(labProcRe)
+	if err != nil {
+		return err
+	}
+	for _, p := range procs {
+		syscall.Kill(p.PID, syscall.SIGINT)
+	}
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(200 * time.Millisecond) {
+		if left, _ := proc.List(labProcRe); len(left) == 0 {
+			break
+		}
+	}
+	fmt.Printf("stopped %d lab process(es)\n", len(procs))
+	return nil
 }

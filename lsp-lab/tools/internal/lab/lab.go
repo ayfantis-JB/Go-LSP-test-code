@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -189,9 +188,9 @@ func modTime(path string) time.Time {
 	return fi.ModTime()
 }
 
-// SkipRe excludes packages from RunExamples and Packages: the intentionally
-// broken diagnostics package, the long-running server and generated stress code.
-var SkipRe = regexp.MustCompile(`/lsp/diagnostics$|/lsp/cmd/server$|/lsp/stress(/|$)`)
+// SkipRe excludes packages from vet, test and runs: the intentionally broken
+// diagnostics package and generated stress code.
+var SkipRe = regexp.MustCompile(`/lsp/diagnostics$|/lsp/stress(/|$)`)
 
 // Packages lists the module's packages minus SkipRe.
 func Packages(dir string) ([]string, error) {
@@ -200,7 +199,7 @@ func Packages(dir string) ([]string, error) {
 
 func goList(dir, format string) ([]string, error) {
 	cmd := exec.Command("go", "list", "-e", "-f", format, "./...")
-	cmd.Dir = dir
+	cmd.Dir, cmd.Env = dir, GoEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("go list: %w", err)
@@ -212,43 +211,4 @@ func goList(dir, format string) ([]string, error) {
 		}
 	}
 	return res, nil
-}
-
-// RunExamples vets and tests the module, then runs every main package.
-func RunExamples(dir string, out io.Writer) error {
-	pkgs, err := Packages(dir)
-	if err != nil {
-		return err
-	}
-	mains, err := goList(dir, `{{if eq .Name "main"}}{{.ImportPath}}{{end}}`)
-	if err != nil {
-		return err
-	}
-	// The lab's own commands are vetted and tested above but not run.
-	mains = slices.DeleteFunc(mains, func(m string) bool { return strings.Contains(m, "/tools/") })
-	var failed []string
-	step := func(title string, args ...string) {
-		fmt.Fprintln(out, "==", title)
-		if err := Go(dir, out, args...); err != nil {
-			failed = append(failed, title)
-		}
-	}
-	step("go vet", append([]string{"vet"}, pkgs...)...)
-	step("go test", append([]string{"test"}, pkgs...)...)
-	for _, m := range mains {
-		step("go run "+m, "run", m)
-	}
-	if len(failed) > 0 {
-		fmt.Fprintln(out, "== FAILURES:", strings.Join(failed, "; "))
-		return fmt.Errorf("%d step(s) failed", len(failed))
-	}
-	fmt.Fprintln(out, "== all OK")
-	return nil
-}
-
-// Go runs the go tool in dir with output to out.
-func Go(dir string, out io.Writer, args ...string) error {
-	cmd := exec.Command("go", args...)
-	cmd.Dir, cmd.Stdout, cmd.Stderr = dir, out, out
-	return cmd.Run()
 }
