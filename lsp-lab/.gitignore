@@ -1,0 +1,18 @@
+lab-out/
+containers/ssh/
+lsp/stress/
+*.test
+
+# --- from github.com/ayfantis-JB/Go-LSP-test-code (GitHub Go template)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+go.work
+go.work.sum
+.env

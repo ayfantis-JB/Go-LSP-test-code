@@ -1,0 +1,67 @@
+# LSP test lab. `go run ./tools/lab up` (generates the SSH key first), `go run ./tools/lab help` for more.
+# All ports bind to localhost only.
+name: lsp-lab
+
+x-common: &common
+  build: &build
+    context: .
+    dockerfile: containers/Dockerfile
+  init: true
+  environment:
+    TZ: ${TZ:-UTC}
+  restart: unless-stopped
+  # Lets jcmd/jstack/strace attach to the language server from inside the container.
+  cap_add: [SYS_PTRACE]
+  security_opt: ["seccomp=unconfined"]
+  labels:
+    lsp-lab.role: "true"
+
+services:
+  devbox:
+    <<: *common
+    build: { <<: *build, target: devbox }
+    hostname: devbox
+    mem_limit: ${DEVBOX_MEM:-4g}
+    ports: ["127.0.0.1:2221:22", "127.0.0.1:2345:2345"]
+    volumes:
+      - .:/workspace
+      - scratch:/home/dev/scratch
+      - gomodcache:/home/dev/go/pkg/mod
+      - vscode-server-devbox:/home/dev/.vscode-server
+      - ./containers/ssh/pub:/run/ssh-pub:ro
+      - ./lab-out/devbox:/lab-out
+
+  runner:
+    <<: *common
+    build: { <<: *build, target: runner }
+    hostname: runner
+    mem_limit: ${RUNNER_MEM:-3g}
+    ports: ["127.0.0.1:2222:22"]
+    volumes:
+      - gomodcache:/home/dev/go/pkg/mod
+      - vscode-server-runner:/home/dev/.vscode-server
+      - ./containers/ssh/pub:/run/ssh-pub:ro
+      - ./lab-out/runner:/lab-out
+
+  app:
+    <<: *common
+    build: { <<: *build, target: app }
+    hostname: app
+    mem_limit: ${APP_MEM:-3g}
+    ports: ["127.0.0.1:2223:22", "127.0.0.1:8080:8080"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+    volumes:
+      - gomodcache:/home/dev/go/pkg/mod
+      - vscode-server-app:/home/dev/.vscode-server
+      - ./containers/ssh/pub:/run/ssh-pub:ro
+      - ./lab-out/app:/lab-out
+
+volumes:
+  scratch:
+  gomodcache:
+  vscode-server-devbox:
+  vscode-server-runner:
+  vscode-server-app:
